@@ -1,24 +1,545 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#152c38"><link rel="manifest" href="manifest.webmanifest"><title>Material IQ</title><style>
-body{font:16px system-ui;margin:0;background:#edf2f4;color:#152c38}header{background:#152c38;color:white;padding:20px}main{max-width:900px;margin:auto;padding:16px}section{background:white;padding:18px;border-radius:12px;margin:12px 0;box-shadow:0 2px 8px #0001}h2{margin-top:0}label{display:inline-grid;gap:5px;margin:8px;min-width:145px}input,select{padding:10px;border:1px solid #b7c6ce;border-radius:6px;font-size:16px;width:135px}button{background:#15677b;color:white;border:0;padding:12px 18px;border-radius:7px;margin:5px;cursor:pointer}table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}small{color:#52616b}.scroll{overflow-x:auto}.total{font-size:24px;font-weight:700}</style></head><body><header><h1>Material IQ</h1><div>Construction material & rough cost estimator · CAD</div></header><main>
-<section><h2>Saved jobs</h2><label>Open saved job<select id="jobPicker" onchange="loadJob()"><option value="">Select a job</option></select></label><div><button onclick="saveJob()">Save current job</button><button onclick="newJob()">New job</button><button onclick="deleteJob()">Delete selected job</button><button onclick="backupJobs()">Backup jobs</button><label>Restore backup<input type="file" accept=".json,application/json" onchange="restoreJobs(event)"></label></div><small>Jobs are saved on this device only. Use Backup jobs to move them to another device or protect against browser data loss. Restoring a backup replaces saved jobs on this device.</small></section><section><h2>Project</h2><label>Project name<input id="name" value="New house"></label><label>Measurement units<select id="unit"><option value="ft">Feet</option><option value="m">Metres</option></select></label><label>Waste allowance %<input id="waste" type="number" value="10" min="0"></label></section>
-<section><h2>Walls</h2><label>Total wall length<input id="walls" type="number" value="160" min="0"></label><label>Wall height<input id="height" type="number" value="8" min="0"></label><label>Stud spacing (inches)<input id="studSpacing" type="number" value="16"></label><label>Plate rows<input id="plates" type="number" value="3"></label><label>Stud price / piece<input id="studPrice" type="number" value="6"></label><label>Plate price / piece<input id="platePrice" type="number" value="7"></label><small>Stud count is a preliminary linear estimate. Corners, intersections, openings and headers are not yet accounted for.</small></section>
-<section><h2>Main floor</h2><label>Floor length<input id="floorL" type="number" value="40"></label><label>Floor width<input id="floorW" type="number" value="30"></label><label>Joist spacing (inches)<input id="joistSpacing" type="number" value="16"></label><label>Joist price / piece<input id="joistPrice" type="number" value="30"></label><label>Floor sheet price<input id="floorSheetPrice" type="number" value="45"></label><small>Joists assumed to span floor width, with no intermediate bearing or engineered sizing. Basement floor is concrete and excluded.</small></section>
-<section><h2>Roof</h2><label>Roof length<input id="roofL" type="number" value="42"></label><label>Sloped roof width (total across both slopes)<input id="roofSlope" type="number" value="36"></label><label>Truss spacing (inches)<input id="trussSpacing" type="number" value="24"></label><label>Truss price / piece<input id="trussPrice" type="number" value="180"></label><label>Roof sheet price<input id="roofSheetPrice" type="number" value="45"></label><label>Tin coverage per panel (sq ft)<input id="tinCoverage" type="number" value="30"></label><label>Tin panel price<input id="tinPrice" type="number" value="55"></label><label>Use roof sheathing<input id="roofSheets" type="checkbox" checked></label><label>Use tin roofing<input id="tin" type="checkbox" checked></label><small>Enter actual sloped roof surface width including both slopes, not horizontal building width. Hip roofs, valleys, ridges, trim and overhangs need separate takeoff.</small></section>
-<section><h2>Fasteners & adhesive (optional allowances)</h2><label>Glue tubes<input id="glueQty" type="number" value="12"></label><label>Price / tube<input id="gluePrice" type="number" value="9"></label><label>Nail boxes<input id="nailQty" type="number" value="5"></label><label>Price / box<input id="nailPrice" type="number" value="65"></label><label>Screw boxes<input id="screwQty" type="number" value="4"></label><label>Price / box<input id="screwPrice" type="number" value="55"></label></section>
-<section><button onclick="calc()">Calculate estimate</button><button onclick="download()">Export CSV</button><button onclick="window.print()">Print / Save PDF</button><div id="summary"></div><div class="scroll"><table><thead><tr><th>Material</th><th>Quantity</th><th>Unit</th><th>Unit cost</th><th>Extended cost</th></tr></thead><tbody id="results"></tbody></table></div><p><small>Planning estimate only. Prices are editable placeholders, not supplier quotes. Verify structural design, openings, lengths, bearing, roof layout, waste and local requirements before purchasing.</small></p></section>
-</main><script>
-let rows=[];const el=id=>document.getElementById(id),v=id=>Number(el(id).value)||0,ceil=Math.ceil;function calc(){const factor=el('unit').value==='m'?3.280839895:1,w=1+v('waste')/100,items=[];function add(n,q,u,p){q=Math.max(0,ceil(q));items.push([n,q,u,p,q*p])}const wl=v('walls')*factor,fl=v('floorL')*factor,fw=v('floorW')*factor,rl=v('roofL')*factor,rs=v('roofSlope')*factor;add('Wall studs', (wl*12/v('studSpacing')+1)*w,'pieces',v('studPrice'));add('Wall plates (8 ft lengths)',wl*v('plates')/8*w,'pieces',v('platePrice'));add('Floor joists', (fl*12/v('joistSpacing')+1)*w,'pieces',v('joistPrice'));add('Floor sheathing (4×8)',fl*fw/32*w,'sheets',v('floorSheetPrice'));add('Roof trusses', (rl*12/v('trussSpacing')+1)*w,'pieces',v('trussPrice'));if(el('roofSheets').checked)add('Roof sheathing (4×8)',rl*rs/32*w,'sheets',v('roofSheetPrice'));if(el('tin').checked)add('Tin roofing panels',rl*rs/v('tinCoverage')*w,'panels',v('tinPrice'));add('Construction glue',v('glueQty'),'tubes',v('gluePrice'));add('Nails',v('nailQty'),'boxes',v('nailPrice'));add('Screws',v('screwQty'),'boxes',v('screwPrice'));rows=items;el('results').innerHTML=items.map(r=>'<tr>'+r.map((c,i)=>'<td>'+(i>2?'$'+c.toFixed(2):c)+'</td>').join('')+'</tr>').join('');el('summary').innerHTML='<p class="total">Estimated materials: $'+items.reduce((s,r)=>s+r[4],0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2})+' CAD</p>'}
-function download(){calc();const data=[['Material','Quantity','Unit','Unit price CAD','Cost CAD'],...rows];const csv=data.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='material-iq-estimate.csv';a.click();URL.revokeObjectURL(a.href)}
-document.querySelectorAll('input:not([type=file]),select:not(#jobPicker)').forEach(x=>x.addEventListener('change',()=>{localStorage.setItem('materialIQ',JSON.stringify(Object.fromEntries([...document.querySelectorAll('input,select')].map(y=>[y.id,y.type==='checkbox'?y.checked:y.value]))));calc()}));try{const saved=JSON.parse(localStorage.getItem('materialIQ')||'{}');for(const [id,val] of Object.entries(saved)){if(el(id)){if(el(id).type==='checkbox')el(id).checked=val;else el(id).value=val}}}catch{}calc();const fields=()=>[...document.querySelectorAll('input:not([type=file]),select:not(#jobPicker)')];
-function snapshot(){return Object.fromEntries(fields().map(y=>[y.id,y.type==='checkbox'?y.checked:y.value]))}
-function jobs(){try{return JSON.parse(localStorage.getItem('materialIQJobs')||'{}')}catch{return {}}}
-function refreshJobs(selected=''){const picker=el('jobPicker');picker.innerHTML='<option value="">Select a job</option>';for(const id of Object.keys(jobs())){const o=document.createElement('option');o.value=id;o.textContent=id;picker.append(o)}picker.value=selected}
-function applyJob(data){for(const [id,val] of Object.entries(data)){if(el(id)){if(el(id).type==='checkbox')el(id).checked=val;else el(id).value=val}}localStorage.setItem('materialIQ',JSON.stringify(snapshot()));calc()}
-function saveJob(){const id=el('name').value.trim();if(!id){alert('Enter a project name first.');return}const all=jobs();if(all[id]&&!confirm('Replace saved job "'+id+'"?'))return;all[id]=snapshot();try{localStorage.setItem('materialIQJobs',JSON.stringify(all));refreshJobs(id)}catch{alert('Device storage is full. Back up your jobs.')}}
-function loadJob(){const id=el('jobPicker').value;if(id&&jobs()[id])applyJob(jobs()[id])}
-function newJob(){el('jobPicker').value='';el('name').value='New job';localStorage.setItem('materialIQ',JSON.stringify(snapshot()));calc()}
-function deleteJob(){const id=el('jobPicker').value;if(!id)return alert('Choose a saved job.');if(!confirm('Delete saved job "'+id+'"?'))return;const all=jobs();delete all[id];localStorage.setItem('materialIQJobs',JSON.stringify(all));refreshJobs()}
-function backupJobs(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({format:'MaterialIQJobs-v1',jobs:jobs()},null,2)],{type:'application/json'}));a.download='material-iq-jobs-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
-async function restoreJobs(e){const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.format!=='MaterialIQJobs-v1'||!data.jobs||Array.isArray(data.jobs)||typeof data.jobs!=='object')throw Error('Invalid backup');if(!confirm('Replace all saved jobs with this backup?'))return;localStorage.setItem('materialIQJobs',JSON.stringify(data.jobs));refreshJobs();alert('Jobs restored.')}catch{alert('Could not read Material IQ backup.')}finally{e.target.value=''}}
-refreshJobs();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
-</script></body></html>
+<!doctype html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="utf-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<meta name="theme-color" content="#152c38">
+
+<title>Material IQ Blueprint Reader</title>
+
+<style>
+
+*{box-sizing:border-box}
+
+body{margin:0;background:#edf2f4;color:#152c38;font:16px system-ui}
+
+header{padding:24px;background:#152c38;color:white}
+
+h1{font-size:27px;margin:8px 0}
+
+h2{font-size:21px;margin-top:0}
+
+main{max-width:780px;margin:auto;padding:16px}
+
+section{background:white;border-radius:14px;padding:18px;margin-bottom:16px}
+
+label{display:block;font-weight:600;margin:12px 0 5px}
+
+input,button{font:inherit}
+
+input:not([type=checkbox]){width:100%;padding:12px;border:1px solid #b7c6ce;border-radius:8px}
+
+button{padding:12px 16px;background:#15677b;color:white;border:0;border-radius:8px;margin:8px 6px 0 0}
+
+.secondary{background:#52616b}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+.room{border:1px solid #d7e1e5;border-radius:10px;padding:14px;margin:12px 0}
+
+.note{background:#fff4d6;padding:12px;border-radius:8px;font-size:14px;line-height:1.5}
+
+.small{font-size:14px;color:#52616b}
+
+img{display:block;max-width:100%;margin-top:12px}
+
+iframe{width:100%;height:440px;border:0;margin-top:12px}
+
+.result{padding:12px;background:#edf2f4;border-radius:8px;margin:8px 0}
+
+a{color:#15677b}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<small>MATERIAL IQ</small>
+
+<h1>Blueprint Reader</h1>
+
+<p>Upload plans · Review rooms · Export measurements</p>
+
+</header>
+
+<main>
+
+<section>
+
+<h2>1. Upload blueprint</h2>
+
+<input id="blueprint" type="file" accept="application/pdf,image/*">
+
+<p id="filename" class="small">Choose a PDF or photo.</p>
+
+<div id="preview"></div>
+
+<p class="note">Starter version: upload and view your plans, then enter measurements below. Automatic AI reading is not connected yet.</p>
+
+</section>
+
+<section>
+
+<h2>2. Project</h2>
+
+<label for="project">Project name</label>
+
+<input id="project" placeholder="House 1">
+
+<p class="small">Enter measurements in feet. For example, 10 feet 6 inches = 10.5.</p>
+
+</section>
+
+<section>
+
+<h2>3. Rooms</h2>
+
+<p class="small">Use a separate row for each rectangular room. For irregular rooms, divide the floor into non-overlapping rectangles.</p>
+
+<div id="rooms"></div>
+
+<button id="add">+ Add room</button>
+
+<button id="calculate">Review totals</button>
+
+<p id="status" class="small"></p>
+
+</section>
+
+<section>
+
+<h2>4. Measurement summary</h2>
+
+<div id="results">Add room dimensions to begin.</div>
+
+<p class="note">Room perimeters count shared walls more than once. These totals are not framing quantities or a material purchase list. Basement floor area does not imply basement sheathing.</p>
+
+<button id="export">Export measurements CSV</button>
+
+<p class="small">Automatic transfer to the separate Material IQ calculator is not connected yet.</p>
+
+</section>
+
+<section>
+
+<h2>Save your work</h2>
+
+<button id="save">Save on this phone</button>
+
+<button id="load" class="secondary">Load saved job</button>
+
+<button id="backup" class="secondary">Download backup</button>
+
+<label for="restore">Restore a backup</label>
+
+<input id="restore" type="file" accept=".json,application/json">
+
+<p class="small">One job can be saved in this browser. Download backups to keep multiple jobs. Blueprint files are not included in saved jobs; select the plan again when reopening.</p>
+
+</section>
+
+</main>
+
+<script>
+
+"use strict";
+
+const el=id=>document.getElementById(id);
+
+const key="materialIQReader-v1";
+
+let rooms=[];
+
+let previewURL=null;
+
+function addRoom(data){
+
+  rooms.push(data||{name:"Room "+(rooms.length+1),length:"",width:"",done:false});
+
+  render();
+
+  update();
+
+}
+
+function render(){
+
+  el("rooms").replaceChildren();
+
+  rooms.forEach((room,index)=>{
+
+    const box=document.createElement("div");
+
+    box.className="room";
+
+    box.innerHTML=`
+
+      <label>Room name</label>
+
+      <input data-field="name">
+
+      <div class="grid">
+
+        <div><label>Length (ft)</label>
+
+        <input data-field="length" type="number" min="0" step="any"></div>
+
+        <div><label>Width (ft)</label>
+
+        <input data-field="width" type="number" min="0" step="any"></div>
+
+      </div>
+
+      <label><input data-field="done" type="checkbox"> Measurements verified against plan</label>
+
+      <button type="button" class="secondary">Remove room</button>`;
+
+    box.querySelectorAll("[data-field]").forEach(input=>{
+
+      const field=input.dataset.field;
+
+      if(field==="done") input.checked=room.done;
+
+      else input.value=room[field];
+
+      input.addEventListener("input",()=>{
+
+        room[field]=field==="done"?input.checked:input.value;
+
+        if(field==="length"||field==="width"){
+
+          room.done=false;
+
+          box.querySelector('[data-field="done"]').checked=false;
+
+        }
+
+        update();
+
+      });
+
+    });
+
+    box.querySelector("button").onclick=()=>{
+
+      rooms.splice(index,1);
+
+      render();
+
+      update();
+
+    };
+
+    el("rooms").append(box);
+
+  });
+
+}
+
+function measured(){
+
+  return rooms.map(room=>{
+
+    const length=Number(room.length);
+
+    const width=Number(room.width);
+
+    const valid=Number.isFinite(length)&&Number.isFinite(width)&&length>0&&width>0;
+
+    return {...room,length,width,valid,
+
+      area:valid?length*width:0,
+
+      perimeter:valid?2*(length+width):0};
+
+  });
+
+}
+
+function update(){
+
+  const data=measured();
+
+  const complete=data.length>0&&data.every(r=>r.valid&&r.done);
+
+  const verified=data.filter(r=>r.valid&&r.done).length;
+
+  el("status").textContent=complete
+
+    ?"All rooms verified."
+
+    :`${verified} of ${data.length} rooms verified.`;
+
+  el("results").replaceChildren();
+
+  let area=0,perimeter=0;
+
+  data.forEach(room=>{
+
+    const row=document.createElement("div");
+
+    row.className="result";
+
+    row.textContent=room.valid
+
+      ?`${room.name||"Unnamed room"}: ${room.area.toFixed(2)} sq ft floor area; ${room.perimeter.toFixed(2)} ft perimeter — ${room.done?"verified":"needs review"}`
+
+      :`${room.name||"Unnamed room"}: enter a positive length and width.`;
+
+    el("results").append(row);
+
+    area+=room.area;
+
+    perimeter+=room.perimeter;
+
+  });
+
+  const total=document.createElement("div");
+
+  total.className="result";
+
+  total.textContent=`Entered-room totals: ${area.toFixed(2)} sq ft floor area; ${perimeter.toFixed(2)} ft summed room perimeters.`;
+
+  el("results").append(total);
+
+  return data;
+
+}
+
+function download(name,text,type){
+
+  const url=URL.createObjectURL(new Blob([text],{type}));
+
+  const link=document.createElement("a");
+
+  link.href=url;
+
+  link.download=name;
+
+  document.body.append(link);
+
+  link.click();
+
+  link.remove();
+
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+
+}
+
+function job(){
+
+  return {format:"MaterialIQReader-v1",project:el("project").value,rooms};
+
+}
+
+function applyJob(value){
+
+  if(!value||value.format!=="MaterialIQReader-v1"||!Array.isArray(value.rooms))
+
+    throw Error("Invalid backup");
+
+  const checked=value.rooms.map(r=>{
+
+    if(!r||typeof r.name!=="string") throw Error("Invalid room");
+
+    const length=Number(r.length),width=Number(r.width);
+
+    if(!Number.isFinite(length)||!Number.isFinite(width)||length<0||width<0)
+
+      throw Error("Invalid dimensions");
+
+    return {name:r.name,length:r.length,width:r.width,done:r.done===true};
+
+  });
+
+  el("project").value=typeof value.project==="string"?value.project:"";
+
+  rooms=checked;
+
+  el("blueprint").value="";
+
+  el("preview").replaceChildren();
+
+  el("filename").textContent="Select the blueprint for this job again.";
+
+  if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null;}
+
+  render();
+
+  update();
+
+}
+
+el("add").onclick=()=>addRoom();
+
+el("calculate").onclick=()=>update();
+
+el("save").onclick=()=>{
+
+  try{
+
+    localStorage.setItem(key,JSON.stringify(job()));
+
+    alert("Job saved on this browser.");
+
+  }catch{
+
+    alert("Browser storage unavailable. Use Download backup.");
+
+  }
+
+};
+
+el("load").onclick=()=>{
+
+  try{
+
+    const saved=localStorage.getItem(key);
+
+    if(!saved){alert("No saved Blueprint Reader job found.");return;}
+
+    if(confirm("Replace the current room entries with the saved job?"))
+
+      applyJob(JSON.parse(saved));
+
+  }catch{alert("Could not load this job.");}
+
+};
+
+el("backup").onclick=()=>download(
+
+  "material-iq-reader-backup.json",
+
+  JSON.stringify(job(),null,2),
+
+  "application/json"
+
+);
+
+el("restore").onchange=async event=>{
+
+  const file=event.target.files[0];
+
+  if(!file)return;
+
+  try{
+
+    const value=JSON.parse(await file.text());
+
+    if(confirm("Replace current room entries with this backup?"))
+
+      applyJob(value);
+
+  }catch{alert("This is not a valid Blueprint Reader backup.");}
+
+  event.target.value="";
+
+};
+
+el("export").onclick=()=>{
+
+  const data=update();
+
+  if(!data.length||data.some(r=>!r.valid)){
+
+    alert("Enter valid dimensions for every room first.");
+
+    return;
+
+  }
+
+  if(data.some(r=>!r.done)&&!confirm("Some rooms are unverified. Export a draft?"))
+
+    return;
+
+  const rows=[
+
+    ["Project","Room","Length ft","Width ft","Floor area sq ft","Room perimeter ft","Verified"],
+
+    ...data.map(r=>[el("project").value,r.name,r.length,r.width,r.area,r.perimeter,r.done?"Yes":"No"])
+
+  ];
+
+  const quote=value=>{
+
+    let text=String(value);
+
+    if(/^[=+\-@\t\r]/.test(text))text="'"+text;
+
+    return '"'+text.replaceAll('"','""')+'"';
+
+  };
+
+  download("material-iq-room-measurements.csv",
+
+    rows.map(row=>row.map(quote).join(",")).join("\r\n"),
+
+    "text/csv;charset=utf-8");
+
+};
+
+el("blueprint").onchange=event=>{
+
+  const file=event.target.files[0];
+
+  if(!file)return;
+
+  el("preview").replaceChildren();
+
+  if(previewURL)URL.revokeObjectURL(previewURL);
+
+  previewURL=URL.createObjectURL(file);
+
+  el("filename").textContent=file.name;
+
+  const open=document.createElement("a");
+
+  open.href=previewURL;
+
+  open.target="_blank";
+
+  open.rel="noopener";
+
+  open.textContent="Open selected blueprint";
+
+  el("preview").append(open);
+
+  if(file.type.startsWith("image/")){
+
+    const img=document.createElement("img");
+
+    img.src=previewURL;
+
+    img.alt="Selected blueprint";
+
+    el("preview").append(img);
+
+  }else if(file.type==="application/pdf"||/\.pdf$/i.test(file.name)){
+
+    const frame=document.createElement("iframe");
+
+    frame.src=previewURL;
+
+    frame.title="Blueprint PDF preview";
+
+    el("preview").append(frame);
+
+  }
+
+};
+
+addRoom();
+
+</script>
+
+</body>
+
+</html>
